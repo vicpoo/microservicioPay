@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-
+	"github.com/kajve/payment-service/internal/domain/ports"
 	"github.com/kajve/payment-service/internal/domain/entities"
 )
 
@@ -132,4 +132,87 @@ func (r *PostgresOrderRepository) MarcarEventoProcesado(ctx context.Context, str
 		WHERE id_evento_stripe = $1
 	`, stripeEventID)
 	return err
+}
+
+
+func (r *PostgresOrderRepository) ListarOrdenes(ctx context.Context, filtro ports.FiltroOrdenes) ([]entities.OrdenConComprador, error) {
+	limit := filtro.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	offset := filtro.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT o.id_orden, o.id_lote, o.id_comprador, o.precio_total, o.moneda,
+		       o.estado_orden,
+		       COALESCE(o.stripe_checkout_session_id, ''),
+		       COALESCE(o.stripe_payment_intent_id, ''),
+		       o.fecha_orden, o.fecha_pago,
+		       c.nombre, c.email, c.telefono, c.pais
+		FROM ordenes o
+		JOIN compradores c ON c.id_comprador = o.id_comprador
+		WHERE ($1 = '' OR o.estado_orden::text = $1)
+		  AND ($2 = 0 OR o.id_lote = $2)
+		ORDER BY o.fecha_orden DESC
+		LIMIT $3 OFFSET $4
+	`, filtro.Estado, filtro.IDLote, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []entities.OrdenConComprador
+	for rows.Next() {
+		var oc entities.OrdenConComprador
+		if err := rows.Scan(
+			&oc.ID, &oc.IDLote, &oc.IDComprador, &oc.PrecioTotal, &oc.Moneda,
+			&oc.Estado, &oc.StripeCheckoutSessionID, &oc.StripePaymentIntentID,
+			&oc.FechaOrden, &oc.FechaPago,
+			&oc.NombreComprador, &oc.EmailComprador, &oc.TelefonoComprador, &oc.PaisComprador,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, oc)
+	}
+	return out, rows.Err()
+}
+
+func (r *PostgresOrderRepository) ObtenerOrdenPorID(ctx context.Context, idOrden int) (entities.OrdenConComprador, error) {
+	var oc entities.OrdenConComprador
+	err := r.pool.QueryRow(ctx, `
+		SELECT o.id_orden, o.id_lote, o.id_comprador, o.precio_total, o.moneda,
+		       o.estado_orden,
+		       COALESCE(o.stripe_checkout_session_id, ''),
+		       COALESCE(o.stripe_payment_intent_id, ''),
+		       o.fecha_orden, o.fecha_pago,
+		       c.nombre, c.email, c.telefono, c.pais
+		FROM ordenes o
+		JOIN compradores c ON c.id_comprador = o.id_comprador
+		WHERE o.id_orden = $1
+	`, idOrden).Scan(
+		&oc.ID, &oc.IDLote, &oc.IDComprador, &oc.PrecioTotal, &oc.Moneda,
+		&oc.Estado, &oc.StripeCheckoutSessionID, &oc.StripePaymentIntentID,
+		&oc.FechaOrden, &oc.FechaPago,
+		&oc.NombreComprador, &oc.EmailComprador, &oc.TelefonoComprador, &oc.PaisComprador,
+	)
+	if err != nil {
+		return entities.OrdenConComprador{}, entities.ErrOrdenNoEncontrada
+	}
+	return oc, nil
+}
+
+func (r *PostgresOrderRepository) ActualizarEstadoOrden(ctx context.Context, idOrden int, nuevoEstado entities.EstadoOrden) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE ordenes SET estado_orden = $1::estado_orden WHERE id_orden = $2
+	`, string(nuevoEstado), idOrden)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return entities.ErrOrdenNoEncontrada
+	}
+	return nil
 }

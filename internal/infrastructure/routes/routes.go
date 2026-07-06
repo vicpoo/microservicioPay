@@ -12,7 +12,7 @@ import (
 
 // NewRouter arma el árbol de rutas HTTP. Es infraestructura pura: solo
 // conecta URLs con controllers, no contiene lógica de negocio.
-func NewRouter(orders *controllers.OrdersController, webhooks *controllers.WebhooksController) http.Handler {
+func NewRouter(orders *controllers.OrdersController, webhooks *controllers.WebhooksController, admin *controllers.OrdersAdminController) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
@@ -22,12 +22,14 @@ func NewRouter(orders *controllers.OrdersController, webhooks *controllers.Webho
 		w.Write([]byte("ok"))
 	})
 
-	// Endpoint público (sin JWT): el comprador no tiene cuenta en kajve.
 	r.Post("/orders", orders.CrearOrden)
-
-	// El webhook no debe pasar por middlewares que consuman/alteren el
-	// body antes de que el gateway verifique la firma de Stripe.
 	r.Post("/webhooks/stripe", webhooks.StripeWebhook)
+
+	r.Route("/admin", func(r chi.Router) {
+		r.Get("/orders", admin.ListarOrdenes)
+		r.Get("/orders/{id}", admin.ObtenerOrden)
+		r.Patch("/orders/{id}/estado", admin.ActualizarEstado)
+	})
 
 	return r
 }

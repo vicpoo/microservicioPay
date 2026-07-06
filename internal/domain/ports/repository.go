@@ -32,4 +32,18 @@ type OrderRepository interface {
 	EventoYaProcesado(ctx context.Context, stripeEventID string) (bool, error)
 	RegistrarEventoWebhook(ctx context.Context, stripeEventID, tipoEvento string, payload []byte) error
 	MarcarEventoProcesado(ctx context.Context, stripeEventID string) error
+
+
+	ListarOrdenes(ctx context.Context, filtro FiltroOrdenes) ([]entities.OrdenConComprador, error)
+	ObtenerOrdenPorID(ctx context.Context, idOrden int) (entities.OrdenConComprador, error)
+	ActualizarEstadoOrden(ctx context.Context, idOrden int, nuevoEstado entities.EstadoOrden) error
+
+}
+
+
+type FiltroOrdenes struct {
+	Estado string
+	IDLote int
+	Limit  int
+	Offset int
 }

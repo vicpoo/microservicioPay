@@ -42,3 +42,12 @@ type Orden struct {
 func (o *Orden) EstaPagada() bool {
 	return o.Estado == EstadoPagada
 }
+
+
+type OrdenConComprador struct {
+	Orden
+	NombreComprador   string
+	EmailComprador    string
+	TelefonoComprador string
+	PaisComprador     string
+}

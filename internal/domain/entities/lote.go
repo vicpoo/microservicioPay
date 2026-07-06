@@ -11,6 +11,8 @@ var (
 	ErrLoteNoDisponible  = errors.New("el lote no está disponible para venta")
 	ErrOrdenYaProcesada  = errors.New("la orden ya fue procesada")
 	ErrFirmaWebhookInvalida = errors.New("firma de webhook inválida")
+	ErrOrdenNoEncontrada = errors.New("la orden no existe")
+	ErrEstadoInvalido    = errors.New("estado de orden inválido")
 )
 
 // LoteVendible es la porción del agregado Osil (dueño del BC Gestión de

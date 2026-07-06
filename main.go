@@ -15,7 +15,6 @@ import (
 	"github.com/kajve/payment-service/internal/infrastructure/stripegateway"
 )
 
-
 func main() {
 	ctx := context.Background()
 
@@ -52,11 +51,17 @@ func main() {
 		procesarWebhookUC = usecases.NewProcesarWebhookUseCase(orderRepo, paymentGateway, nil)
 	}
 
+	// --- Casos de uso administrativos ---
+	listarOrdenesUC := usecases.NewListarOrdenesUseCase(orderRepo)
+	obtenerOrdenUC := usecases.NewObtenerOrdenUseCase(orderRepo)
+	actualizarEstadoUC := usecases.NewActualizarEstadoOrdenUseCase(orderRepo)
+
 	// --- Adaptadores de entrada (HTTP) ---
 	ordersController := controllers.NewOrdersController(crearOrdenUC)
 	webhooksController := controllers.NewWebhooksController(procesarWebhookUC)
+	ordersAdminController := controllers.NewOrdersAdminController(listarOrdenesUC, obtenerOrdenUC, actualizarEstadoUC)
 
-	router := routes.NewRouter(ordersController, webhooksController)
+	router := routes.NewRouter(ordersController, webhooksController, ordersAdminController)
 
 	log.Printf("payment-service (arquitectura hexagonal) escuchando en :%s", cfg.Port)
 	if err := http.ListenAndServe(":"+cfg.Port, router); err != nil {
