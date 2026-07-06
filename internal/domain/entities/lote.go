@@ -1,3 +1,4 @@
+//internal/domain/entities/lote.go
 package entities
 
 import (

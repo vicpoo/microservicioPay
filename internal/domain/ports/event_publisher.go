@@ -1,3 +1,4 @@
+//internal/domain/ports/event_publisher.go
 package ports
 
 import (

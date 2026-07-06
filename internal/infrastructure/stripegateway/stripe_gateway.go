@@ -1,3 +1,4 @@
+//internal/infrastructure/stripegateway/stripe_gateway.go
 package stripegateway
 
 import (

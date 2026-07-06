@@ -1,3 +1,4 @@
+//internal/domain/entities/orden.go
 package entities
 
 import "time"

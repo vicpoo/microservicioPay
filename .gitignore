@@ -1,0 +1,56 @@
+# Entorno virtual
+.venv/
+venv/
+ENV/
+
+# Variables de entorno
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Logs
+*.log
+
+# SQLite
+*.sqlite3
+*.db
+
+# IDE
+.vscode/
+.idea/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Pytest
+.pytest_cache/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# mypy
+.mypy_cache/
+
+# Ruff
+.ruff_cache/
+
+# Node (si algún día lo usas)
+node_modules/
+
+# Archivos temporales
+*.tmp
+*.bak

@@ -1,3 +1,4 @@
+//internal/domain/ports/payment_gateway.go
 package ports
 
 // CheckoutSessionEvent es la representación mínima, agnóstica de

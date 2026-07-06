@@ -1,3 +1,4 @@
+//internal/infrastructure/messaging/rabbitmq_publisher.go
 package messaging
 
 import (
