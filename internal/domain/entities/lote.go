@@ -7,28 +7,25 @@ import (
 )
 
 var (
-	ErrLoteNoEncontrado  = errors.New("el lote no existe o no está finalizado")
-	ErrLoteNoDisponible  = errors.New("el lote no está disponible para venta")
-	ErrOrdenYaProcesada  = errors.New("la orden ya fue procesada")
+	ErrLoteNoEncontrado     = errors.New("el lote no existe o no está finalizado")
+	ErrLoteNoDisponible     = errors.New("el lote no está disponible para venta")
+	ErrOrdenYaProcesada     = errors.New("la orden ya fue procesada")
 	ErrFirmaWebhookInvalida = errors.New("firma de webhook inválida")
-	ErrOrdenNoEncontrada = errors.New("la orden no existe")
-	ErrEstadoInvalido    = errors.New("estado de orden inválido")
-)
+	ErrOrdenNoEncontrada    = errors.New("la orden no existe")
+	ErrEstadoInvalido       = errors.New("estado de orden inválido")
 
-// LoteVendible es la porción del agregado Osil (dueño del BC Gestión de
-// Osiles) que el BC de Ventas necesita para decidir si puede vender.
-// El BC de Ventas es "Conformist" respecto al modelo de Osil (SAD/Dominio,
-// Sección 5.1): solo lee, nunca modifica su estructura.
-type LoteVendible struct {
-	IDLote      int
-	NombreLote  string
-	Precio      float64
-	Disponible  bool
-}
+	// --- Nuevos: catálogo y suscripciones ---
+	ErrProductoNoEncontrado  = errors.New("el producto no existe")
+	ErrProductoNoDisponible  = errors.New("el producto no está disponible (inactivo o sin stock)")
+	ErrProductoTipoInvalido  = errors.New("tipo de producto inválido")
+	ErrUsuarioRequerido      = errors.New("id_usuario es requerido para comprar una suscripción")
+	ErrDatosProductoInvalidos = errors.New("faltan datos requeridos para este tipo de producto")
+)
 
 // EventoOsilVendido es el evento de dominio que el BC de Ventas publica
 // hacia el bus de eventos para que Gestión de Osiles reaccione
-// (Published Language, ADR-001 del SAD).
+// (Published Language, ADR-001 del SAD). Solo aplica a ventas de tipo
+// cama_cafe; las suscripciones no generan este evento.
 type EventoOsilVendido struct {
 	IDLote      int
 	IDOrden     int

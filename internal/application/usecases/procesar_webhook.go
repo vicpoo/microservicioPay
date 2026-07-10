@@ -11,9 +11,11 @@ import (
 )
 
 // ProcesarWebhookUseCase verifica la firma, aplica idempotencia por
-// event.ID, marca la orden como pagada y publica el evento de dominio
-// osil.vendido. No sabe que el transporte es HTTP ni que la pasarela
-// es Stripe — solo conoce los puertos.
+// event.ID, marca la orden como pagada (lo que dispara stock/suscripción
+// según corresponda dentro del repositorio) y publica el evento de
+// dominio osil.vendido SOLO cuando la compra involucró un lote físico.
+// No sabe que el transporte es HTTP ni que la pasarela es Stripe —
+// solo conoce los puertos.
 type ProcesarWebhookUseCase struct {
 	repo      ports.OrderRepository
 	gateway   ports.PaymentGateway
@@ -39,12 +41,17 @@ func (uc *ProcesarWebhookUseCase) Execute(ctx context.Context, payload []byte, f
 	}
 
 	if evento.EsCheckoutCompletado {
+		// MarcarOrdenPagada ya decide internamente, dentro de una sola
+		// transacción, si esto fue una cama_cafe (descuenta stock) o una
+		// suscripcion (activa/renueva el plan del usuario). idLote regresa
+		// 0 cuando el producto comprado no tenía un lote físico asociado
+		// (por ejemplo, cualquier suscripción).
 		idOrden, idLote, err := uc.repo.MarcarOrdenPagada(ctx, evento.CheckoutSessionID, evento.PaymentIntentID)
 		if err != nil {
 			return fmt.Errorf("error marcando orden pagada: %w", err)
 		}
 
-		if uc.publisher != nil {
+		if idLote != 0 && uc.publisher != nil {
 			_ = uc.publisher.PublicarOsilVendido(ctx, entities.EventoOsilVendido{
 				IDLote:      idLote,
 				IDOrden:     idOrden,

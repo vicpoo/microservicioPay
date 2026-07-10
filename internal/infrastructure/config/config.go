@@ -17,7 +17,7 @@ type Config struct {
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:                getEnv("PORT", "8080"),
+		Port:                getEnv("PORT", "8000"),
 		DatabaseURL:         os.Getenv("DATABASE_URL"),
 		StripeSecretKey:     os.Getenv("STRIPE_SECRET_KEY"),
 		StripeWebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),

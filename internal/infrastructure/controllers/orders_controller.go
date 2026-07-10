@@ -11,11 +11,15 @@ import (
 )
 
 type ordenRequest struct {
-	IDLote            int    `json:"id_lote"`
+	IDProducto        int    `json:"id_producto"`
 	NombreComprador   string `json:"nombre_comprador"`
 	EmailComprador    string `json:"email_comprador"`
 	TelefonoComprador string `json:"telefono_comprador,omitempty"`
 	Pais              string `json:"pais,omitempty"`
+	// IDUsuario es requerido SOLO si el id_producto comprado es de tipo
+	// "suscripcion" (necesitamos saber a qué usuario de kajve activarle
+	// el plan). Para camas de café se puede omitir.
+	IDUsuario *int `json:"id_usuario,omitempty"`
 }
 
 // OrdersController es un adaptador de entrada: traduce HTTP <-> caso de
@@ -35,24 +39,27 @@ func (c *OrdersController) CrearOrden(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "payload inválido", http.StatusBadRequest)
 		return
 	}
-	if req.IDLote == 0 || req.NombreComprador == "" || req.EmailComprador == "" {
-		http.Error(w, "id_lote, nombre_comprador y email_comprador son requeridos", http.StatusBadRequest)
+	if req.IDProducto == 0 || req.NombreComprador == "" || req.EmailComprador == "" {
+		http.Error(w, "id_producto, nombre_comprador y email_comprador son requeridos", http.StatusBadRequest)
 		return
 	}
 
 	out, err := c.crearOrden.Execute(r.Context(), usecases.CrearOrdenInput{
-		IDLote:            req.IDLote,
+		IDProducto:        req.IDProducto,
 		NombreComprador:   req.NombreComprador,
 		EmailComprador:    req.EmailComprador,
 		TelefonoComprador: req.TelefonoComprador,
 		Pais:              req.Pais,
+		IDUsuario:         req.IDUsuario,
 	})
 	if err != nil {
 		switch {
-		case errors.Is(err, entities.ErrLoteNoEncontrado):
+		case errors.Is(err, entities.ErrProductoNoEncontrado):
 			http.Error(w, err.Error(), http.StatusNotFound)
-		case errors.Is(err, entities.ErrLoteNoDisponible):
+		case errors.Is(err, entities.ErrProductoNoDisponible):
 			http.Error(w, err.Error(), http.StatusConflict)
+		case errors.Is(err, entities.ErrUsuarioRequerido):
+			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
 			http.Error(w, "error interno creando la orden", http.StatusInternalServerError)
 		}

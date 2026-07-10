@@ -13,6 +13,8 @@ const (
 )
 
 // Comprador es un guest checkout: NO tiene cuenta en kajve.
+// (Cuando la orden es una suscripción, además del comprador se guarda
+// el IDUsuario en la Orden para saber a quién activarle el plan.)
 type Comprador struct {
 	ID               int
 	Nombre           string
@@ -23,11 +25,15 @@ type Comprador struct {
 	CreatedAt        time.Time
 }
 
-// Orden representa la compra de UN osil completo.
+// Orden representa la compra de UN producto del catálogo: puede ser una
+// cama de café o un plan de suscripción.
 type Orden struct {
 	ID                      int
-	IDLote                  int
+	IDProducto              int
+	TipoOrden               TipoProducto
+	IDLote                  *int // opcional, heredado del producto (solo trazabilidad de cama_cafe)
 	IDComprador             int
+	IDUsuario               *int // requerido cuando TipoOrden == TipoSuscripcion
 	PrecioTotal             float64
 	Moneda                  string
 	Estado                  EstadoOrden
@@ -43,11 +49,11 @@ func (o *Orden) EstaPagada() bool {
 	return o.Estado == EstadoPagada
 }
 
-
 type OrdenConComprador struct {
 	Orden
 	NombreComprador   string
 	EmailComprador    string
 	TelefonoComprador string
 	PaisComprador     string
+	NombreProducto    string
 }

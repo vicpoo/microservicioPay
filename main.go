@@ -51,17 +51,27 @@ func main() {
 		procesarWebhookUC = usecases.NewProcesarWebhookUseCase(orderRepo, paymentGateway, nil)
 	}
 
-	// --- Casos de uso administrativos ---
+	// --- Casos de uso administrativos: órdenes ---
 	listarOrdenesUC := usecases.NewListarOrdenesUseCase(orderRepo)
 	obtenerOrdenUC := usecases.NewObtenerOrdenUseCase(orderRepo)
 	actualizarEstadoUC := usecases.NewActualizarEstadoOrdenUseCase(orderRepo)
+
+	// --- Casos de uso administrativos: catálogo (camas de café + suscripciones) ---
+	crearProductoUC := usecases.NewCrearProductoUseCase(orderRepo)
+	listarProductosUC := usecases.NewListarProductosUseCase(orderRepo)
+	obtenerProductoUC := usecases.NewObtenerProductoUseCase(orderRepo)
+	actualizarProductoUC := usecases.NewActualizarProductoUseCase(orderRepo)
+	eliminarProductoUC := usecases.NewEliminarProductoUseCase(orderRepo)
 
 	// --- Adaptadores de entrada (HTTP) ---
 	ordersController := controllers.NewOrdersController(crearOrdenUC)
 	webhooksController := controllers.NewWebhooksController(procesarWebhookUC)
 	ordersAdminController := controllers.NewOrdersAdminController(listarOrdenesUC, obtenerOrdenUC, actualizarEstadoUC)
+	catalogAdminController := controllers.NewCatalogAdminController(
+		crearProductoUC, listarProductosUC, obtenerProductoUC, actualizarProductoUC, eliminarProductoUC,
+	)
 
-	router := routes.NewRouter(ordersController, webhooksController, ordersAdminController)
+	router := routes.NewRouter(ordersController, webhooksController, ordersAdminController, catalogAdminController)
 
 	log.Printf("payment-service (arquitectura hexagonal) escuchando en :%s", cfg.Port)
 	if err := http.ListenAndServe(":"+cfg.Port, router); err != nil {
