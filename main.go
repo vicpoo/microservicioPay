@@ -5,6 +5,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/kajve/payment-service/internal/application/usecases"
 	"github.com/kajve/payment-service/internal/infrastructure/config"
@@ -63,6 +64,28 @@ func main() {
 	actualizarProductoUC := usecases.NewActualizarProductoUseCase(orderRepo)
 	eliminarProductoUC := usecases.NewEliminarProductoUseCase(orderRepo)
 
+	// --- Casos de uso: premium ---
+	expirarPremiumsUC := usecases.NewExpirarPremiumsUseCase(orderRepo)
+	verificarPremiumUC := usecases.NewVerificarPremiumUseCase(orderRepo)
+
+	// Scheduler en memoria: no dependemos de pg_cron porque en Neon los
+	// jobs no corren si el compute está en scale-to-zero. Como este
+	// servicio ya vive corriendo 24/7, aquí es donde debe vivir el tick
+	// que apaga a los usuarios cuyo mes de premium ya venció.
+	go func() {
+		ticker := time.NewTicker(15 * time.Minute)
+		defer ticker.Stop()
+		for {
+			n, err := expirarPremiumsUC.Execute(context.Background())
+			if err != nil {
+				log.Printf("aviso: error expirando premiums vencidos: %v", err)
+			} else if n > 0 {
+				log.Printf("premium: %d usuario(s) desactivados por vencimiento", n)
+			}
+			<-ticker.C
+		}
+	}()
+
 	// --- Adaptadores de entrada (HTTP) ---
 	ordersController := controllers.NewOrdersController(crearOrdenUC)
 	webhooksController := controllers.NewWebhooksController(procesarWebhookUC)
@@ -70,8 +93,15 @@ func main() {
 	catalogAdminController := controllers.NewCatalogAdminController(
 		crearProductoUC, listarProductosUC, obtenerProductoUC, actualizarProductoUC, eliminarProductoUC,
 	)
+	premiumController := controllers.NewPremiumController(verificarPremiumUC)
 
-	router := routes.NewRouter(ordersController, webhooksController, ordersAdminController, catalogAdminController)
+	router := routes.NewRouter(
+		ordersController,
+		webhooksController,
+		ordersAdminController,
+		catalogAdminController,
+		premiumController,
+	)
 
 	log.Printf("payment-service (arquitectura hexagonal) escuchando en :%s", cfg.Port)
 	if err := http.ListenAndServe(":"+cfg.Port, router); err != nil {

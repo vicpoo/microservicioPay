@@ -22,6 +22,7 @@ func NewRouter(
 	webhooks *controllers.WebhooksController,
 	ordersAdmin *controllers.OrdersAdminController,
 	catalogAdmin *controllers.CatalogAdminController,
+	premium *controllers.PremiumController,
 ) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -48,6 +49,12 @@ func NewRouter(
 	// casos de uso de solo-lectura del CRUD administrativo.
 	r.Get("/catalogo", catalogAdmin.ListarProductos)
 	r.Get("/catalogo/{id}", catalogAdmin.ObtenerProducto)
+
+	// Estado premium de un usuario (solo lectura). Pública por ahora,
+	// igual que /catalogo — si más adelante quieres que cada quien solo
+	// pueda ver su propio estado, esto debería ir detrás de auth de
+	// usuario (no de admin) comparando el {id} contra el JWT.
+	r.Get("/usuarios/{id}/premium", premium.VerificarPremium)
 
 	r.Route("/admin", func(r chi.Router) {
 		r.Get("/orders", ordersAdmin.ListarOrdenes)

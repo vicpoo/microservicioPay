@@ -8,8 +8,8 @@ import (
 )
 
 // OrderRepository es el puerto que el dominio/aplicación usa para
-// persistir órdenes, compradores, catálogo y activación de suscripciones.
-// La implementación concreta (Postgres, u otra) vive en
+// persistir órdenes, compradores, catálogo y el estado premium de los
+// usuarios. La implementación concreta (Postgres, u otra) vive en
 // infrastructure/repository.
 type OrderRepository interface {
 	// --- Catálogo ---
@@ -39,8 +39,8 @@ type OrderRepository interface {
 	// tipo_orden:
 	//   - cama_cafe: descuenta stock del producto (y bloquea el lote
 	//     asociado si lo tiene, para trazabilidad).
-	//   - suscripcion: activa/renueva la suscripción del id_usuario
-	//     de la orden.
+	//   - suscripcion: activa el campo es_premium del usuario y le fija
+	//     premium_hasta = NOW() + duracion_dias del plan comprado.
 	// Todo en una sola transacción. Regresa el id_lote (si aplica, para
 	// publicar el evento de dominio osil.vendido) o 0 si no hay lote.
 	MarcarOrdenPagada(ctx context.Context, checkoutSessionID, paymentIntentID string) (idOrden int, idLote int, err error)
@@ -53,6 +53,21 @@ type OrderRepository interface {
 	ListarOrdenes(ctx context.Context, filtro FiltroOrdenes) ([]entities.OrdenConComprador, error)
 	ObtenerOrdenPorID(ctx context.Context, idOrden int) (entities.OrdenConComprador, error)
 	ActualizarEstadoOrden(ctx context.Context, idOrden int, nuevoEstado entities.EstadoOrden) error
+
+	// --- Premium (usuarios) ---
+
+	// ActivarPremiumUsuario prende usuarios.es_premium y fija
+	// premium_hasta = NOW() + duracionDias. Cada activación resetea el
+	// plazo desde ahora (no se acumula con uno previo vigente).
+	ActivarPremiumUsuario(ctx context.Context, idUsuario int, duracionDias int) error
+
+	// ExpirarPremiumsVencidos apaga es_premium para todos los usuarios
+	// cuyo premium_hasta ya pasó. Se llama periódicamente desde main.go.
+	ExpirarPremiumsVencidos(ctx context.Context) (int, error)
+
+	// EsPremium se auto-corrige (si ya venció, apaga el boolean antes de
+	// leerlo) y regresa el estado premium actual del usuario.
+	EsPremium(ctx context.Context, idUsuario int) (bool, error)
 }
 
 type FiltroOrdenes struct {

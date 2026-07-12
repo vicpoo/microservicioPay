@@ -228,9 +228,9 @@ func (r *PostgresOrderRepository) ActualizarCheckoutSession(ctx context.Context,
 }
 
 // MarcarOrdenPagada marca la orden como pagada y, según tipo_orden,
-// descuenta stock del catálogo (cama_cafe) o activa/renueva la
-// suscripción del usuario (suscripcion). Todo en una sola transacción.
-// Regresa idLote = 0 cuando el producto comprado no tenía un lote físico
+// descuenta stock del catálogo (cama_cafe) o activa el premium del
+// usuario (suscripcion). Todo en una sola transacción. Regresa
+// idLote = 0 cuando el producto comprado no tenía un lote físico
 // asociado (para que el caso de uso sepa que no debe publicar el evento
 // de dominio osil.vendido).
 func (r *PostgresOrderRepository) MarcarOrdenPagada(ctx context.Context, checkoutSessionID, paymentIntentID string) (idOrden int, idLote int, err error) {
@@ -293,31 +293,31 @@ func (r *PostgresOrderRepository) MarcarOrdenPagada(ctx context.Context, checkou
 		}
 
 	case string(entities.TipoSuscripcion):
+		// Ya NO se usa la tabla suscripciones. En vez de crear un
+		// registro ahí, se activa directamente el boolean es_premium
+		// del usuario y se le fija hasta cuándo dura, tomando la
+		// duración del plan comprado en el catálogo.
 		if idUsuario == nil {
 			return 0, 0, entities.ErrUsuarioRequerido
 		}
-		var plan string
-		var duracionDias, lotesMax int
+		var duracionDias int
 		if err = tx.QueryRow(ctx, `
-			SELECT plan_suscripcion, duracion_dias, lotes_max FROM catalogo_productos WHERE id_producto = $1
-		`, idProducto).Scan(&plan, &duracionDias, &lotesMax); err != nil {
-			return 0, 0, fmt.Errorf("no se pudo leer el plan de suscripción: %w", err)
+			SELECT duracion_dias FROM catalogo_productos WHERE id_producto = $1
+		`, idProducto).Scan(&duracionDias); err != nil {
+			return 0, 0, fmt.Errorf("no se pudo leer la duración del plan: %w", err)
 		}
 
-		// Cualquier suscripción activa previa del usuario se cierra antes
-		// de activar la nueva (evita traslapes de planes).
-		if _, err = tx.Exec(ctx, `
-			UPDATE suscripciones SET estado = 'cancelada'
-			WHERE id_usuario = $1 AND estado = 'activa'
-		`, *idUsuario); err != nil {
-			return 0, 0, fmt.Errorf("error cerrando suscripción previa: %w", err)
+		tag, err := tx.Exec(ctx, `
+			UPDATE usuarios
+			SET es_premium = TRUE,
+			    premium_hasta = NOW() + ($2 || ' days')::interval
+			WHERE id_usuario = $1
+		`, *idUsuario, duracionDias)
+		if err != nil {
+			return 0, 0, fmt.Errorf("error activando premium del usuario: %w", err)
 		}
-
-		if _, err = tx.Exec(ctx, `
-			INSERT INTO suscripciones (id_usuario, plan, estado, fecha_inicio, fecha_fin, mp_subscription_id, lotes_max)
-			VALUES ($1, $2, 'activa', NOW(), NOW() + ($3 || ' days')::interval, $4, $5)
-		`, *idUsuario, plan, duracionDias, checkoutSessionID, lotesMax); err != nil {
-			return 0, 0, fmt.Errorf("error activando la suscripción: %w", err)
+		if tag.RowsAffected() == 0 {
+			return 0, 0, fmt.Errorf("no se encontró el usuario %d para activar premium", *idUsuario)
 		}
 		// idLote se queda en 0: no hay evento osil.vendido para suscripciones.
 	}
@@ -490,6 +490,66 @@ func (r *PostgresOrderRepository) ActualizarEstadoOrden(ctx context.Context, idO
 	}
 
 	return tx.Commit(ctx)
+}
+
+// ============================================================
+// Premium
+// ============================================================
+
+// ActivarPremiumUsuario prende es_premium y fija premium_hasta contando
+// desde AHORA (no acumula con un plazo previo vigente: cada activación
+// resetea el plazo, igual que hacía antes la lógica de suscripciones).
+func (r *PostgresOrderRepository) ActivarPremiumUsuario(ctx context.Context, idUsuario int, duracionDias int) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE usuarios
+		SET es_premium = TRUE,
+		    premium_hasta = NOW() + ($2 || ' days')::interval
+		WHERE id_usuario = $1
+	`, idUsuario, duracionDias)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return entities.ErrUsuarioNoEncontrado
+	}
+	return nil
+}
+
+// ExpirarPremiumsVencidos apaga es_premium para todos los usuarios cuyo
+// premium_hasta ya pasó. Reutiliza la función SQL creada en la
+// migración (public.expirar_premiums_vencidos) para no duplicar lógica
+// entre Go y SQL.
+func (r *PostgresOrderRepository) ExpirarPremiumsVencidos(ctx context.Context) (int, error) {
+	var afectados int
+	err := r.pool.QueryRow(ctx, `SELECT public.expirar_premiums_vencidos()`).Scan(&afectados)
+	if err != nil {
+		return 0, err
+	}
+	return afectados, nil
+}
+
+// EsPremium se auto-corrige (si ya venció, apaga el boolean) antes de
+// leer el estado, para no depender exclusivamente del scheduler.
+func (r *PostgresOrderRepository) EsPremium(ctx context.Context, idUsuario int) (bool, error) {
+	if _, err := r.pool.Exec(ctx, `
+		UPDATE usuarios
+		SET es_premium = FALSE
+		WHERE id_usuario = $1
+		  AND es_premium = TRUE
+		  AND premium_hasta IS NOT NULL
+		  AND premium_hasta < NOW()
+	`, idUsuario); err != nil {
+		return false, err
+	}
+
+	var esPremium bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT es_premium FROM usuarios WHERE id_usuario = $1
+	`, idUsuario).Scan(&esPremium)
+	if err != nil {
+		return false, entities.ErrUsuarioNoEncontrado
+	}
+	return esPremium, nil
 }
 
 // --- helpers para nullable ---

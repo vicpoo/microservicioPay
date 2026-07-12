@@ -14,12 +14,15 @@ var (
 	ErrOrdenNoEncontrada    = errors.New("la orden no existe")
 	ErrEstadoInvalido       = errors.New("estado de orden inválido")
 
-	// --- Nuevos: catálogo y suscripciones ---
+	// --- Catálogo y suscripciones ---
 	ErrProductoNoEncontrado  = errors.New("el producto no existe")
 	ErrProductoNoDisponible  = errors.New("el producto no está disponible (inactivo o sin stock)")
 	ErrProductoTipoInvalido  = errors.New("tipo de producto inválido")
 	ErrUsuarioRequerido      = errors.New("id_usuario es requerido para comprar una suscripción")
 	ErrDatosProductoInvalidos = errors.New("faltan datos requeridos para este tipo de producto")
+
+	// --- Premium ---
+	ErrUsuarioNoEncontrado = errors.New("el usuario no existe")
 )
 
 // EventoOsilVendido es el evento de dominio que el BC de Ventas publica
