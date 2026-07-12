@@ -21,8 +21,8 @@ func Load() (*Config, error) {
 		DatabaseURL:         os.Getenv("DATABASE_URL"),
 		StripeSecretKey:     os.Getenv("STRIPE_SECRET_KEY"),
 		StripeWebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
-		StripeSuccessURL:    getEnv("STRIPE_SUCCESS_URL", "https://kajve.com/orden/exito"),
-		StripeCancelURL:     getEnv("STRIPE_CANCEL_URL", "https://kajve.com/orden/cancelada"),
+		StripeSuccessURL:    getEnv("STRIPE_SUCCESS_URL", "https://landing-cafe-8vji.vercel.app/orden/exito"),
+		StripeCancelURL:     getEnv("STRIPE_CANCEL_URL", "https://landing-cafe-8vji.vercel.app/orden/cancelada"),
 		RabbitMQURL:         getEnv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/"),
 		RabbitMQExchange:    getEnv("RABBITMQ_EXCHANGE", "kajve.events"),
 	}
