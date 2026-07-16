@@ -4,6 +4,7 @@ package controllers
 import (
 	"errors"
 	"io"
+	"log"
 	"net/http"
 
 	"github.com/kajve/payment-service/internal/application/usecases"
@@ -34,6 +35,11 @@ func (c *WebhooksController) StripeWebhook(w http.ResponseWriter, r *http.Reques
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		// No filtramos el error real al cliente (podría traer detalles
+		// internos), pero SÍ lo queremos en logs — sin esto, un 500 acá
+		// no dice nada sobre si falló MarcarOrdenPagada, por qué tipo de
+		// orden, etc.
+		log.Printf("[stripe webhook] error procesando evento: %v", err)
 		http.Error(w, "error interno procesando el webhook", http.StatusInternalServerError)
 		return
 	}
