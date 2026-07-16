@@ -307,10 +307,15 @@ func (r *PostgresOrderRepository) MarcarOrdenPagada(ctx context.Context, checkou
 			return 0, 0, fmt.Errorf("no se pudo leer la duración del plan: %w", err)
 		}
 
+		// make_interval(days => $2) en vez de ($2 || ' days')::interval:
+		// el operador || fuerza a Postgres a inferir $2 como text, y pgx
+		// no puede codificar un int de Go como texto para ese parámetro
+		// ("cannot find encode plan"). make_interval acepta el entero
+		// directamente, sin concatenación de strings.
 		tag, err := tx.Exec(ctx, `
 			UPDATE usuarios
 			SET es_premium = TRUE,
-			    premium_hasta = NOW() + ($2 || ' days')::interval
+			    premium_hasta = NOW() + make_interval(days => $2)
 			WHERE id_usuario = $1
 		`, *idUsuario, duracionDias)
 		if err != nil {
@@ -560,10 +565,13 @@ func (r *PostgresOrderRepository) ActualizarEstadoOrden(ctx context.Context, idO
 // desde AHORA (no acumula con un plazo previo vigente: cada activación
 // resetea el plazo, igual que hacía antes la lógica de suscripciones).
 func (r *PostgresOrderRepository) ActivarPremiumUsuario(ctx context.Context, idUsuario int, duracionDias int) error {
+	// make_interval(days => $2) en vez de ($2 || ' days')::interval — ver
+	// nota en MarcarOrdenPagada sobre por qué || rompe la codificación
+	// del parámetro entero con pgx.
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE usuarios
 		SET es_premium = TRUE,
-		    premium_hasta = NOW() + ($2 || ' days')::interval
+		    premium_hasta = NOW() + make_interval(days => $2)
 		WHERE id_usuario = $1
 	`, idUsuario, duracionDias)
 	if err != nil {
