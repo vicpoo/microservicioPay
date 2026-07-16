@@ -60,8 +60,12 @@ func (g *StripeGateway) CrearSesionPago(customerID string, idOrden int, nombreLo
 			CustomerBalance: &stripe.CheckoutSessionPaymentMethodOptionsCustomerBalanceParams{
 				FundingType: stripe.String("bank_transfer"),
 				BankTransfer: &stripe.CheckoutSessionPaymentMethodOptionsCustomerBalanceBankTransferParams{
-					Type:                   stripe.String("mx_bank_transfer"),
-					RequestedAddressTypes: stripe.StringSlice([]string{"mx"}),
+					Type: stripe.String("mx_bank_transfer"),
+					// Stripe identifica requested_address_types por RED
+					// de transferencia, no por país — para México es
+					// "spei" (no "mx"). Los otros valores válidos son
+					// aba, swift, sort_code, zengin, sepa e iban.
+					RequestedAddressTypes: stripe.StringSlice([]string{"spei"}),
 				},
 			},
 		},
