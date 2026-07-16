@@ -97,14 +97,29 @@ func (g *StripeGateway) CrearSesionPago(customerID string, idOrden int, nombreLo
 }
 
 func (g *StripeGateway) VerificarYParsearWebhook(payload []byte, firma string) (ports.CheckoutSessionEvent, error) {
-	event, err := webhook.ConstructEvent(payload, firma, g.webhookSecret)
+	// El SDK stripe-go v78.12.0 fue generado para la API version
+	// 2024-04-10. La cuenta de Stripe usa una API version más nueva
+	// (la que esté configurada como default, o la que se haya fijado al
+	// crear el endpoint del webhook), y por default el SDK rechaza
+	// eventos que no coincidan exactamente con esa versión — no por
+	// desconfianza de la firma, sino como salvaguarda ante cambios de
+	// forma en el payload entre versiones de la API. Los campos que
+	// leemos de CheckoutSession (ID, AmountTotal, PaymentIntent.ID,
+	// CustomerDetails.Email, PaymentStatus) son estables entre
+	// versiones, así que es seguro ignorar el mismatch aquí.
+	//
+	// Alternativa más "correcta" a futuro: en el Dashboard de Stripe, al
+	// editar el endpoint del webhook, se puede fijar su API version a
+	// 2024-04-10 para que coincida con el SDK sin necesitar esta
+	// bandera. Mientras tanto, esto desbloquea el flujo sin tocar Stripe.
+	event, err := webhook.ConstructEventWithOptions(payload, firma, g.webhookSecret, webhook.ConstructEventOptions{
+		IgnoreAPIVersionMismatch: true,
+	})
 	if err != nil {
 		// El caso de uso convierte esto en un error genérico para la
 		// respuesta HTTP (no queremos filtrar detalles al exterior),
-		// pero en logs SÍ queremos el motivo real: casi siempre es que
-		// STRIPE_WEBHOOK_SECRET en este proceso no coincide con el
-		// "signing secret" del endpoint configurado en el Dashboard de
-		// Stripe (o con el de `stripe listen`, si se prueba con el CLI).
+		// pero en logs SÍ queremos el motivo real: firma inválida,
+		// timestamp fuera de tolerancia, payload malformado, etc.
 		log.Printf("[stripe webhook] verificación de firma falló: %v", err)
 		return ports.CheckoutSessionEvent{}, err
 	}
