@@ -4,14 +4,27 @@ package ports
 // CheckoutSessionEvent es la representación mínima, agnóstica de
 // Stripe, de lo que la aplicación necesita del webhook para actuar.
 // Evita que el caso de uso dependa de tipos del SDK de Stripe.
+//
+// OXXO y transferencia bancaria (customer_balance) son métodos de pago
+// ASÍNCRONOS: checkout.session.completed se dispara apenas se genera el
+// voucher/CLABE, no cuando el cliente realmente paga. Por eso separamos
+// "la sesión se completó" de "el dinero ya llegó":
+//   - EsPagoConfirmado: el dinero ya está confirmado (tarjeta pagada al
+//     instante dentro de checkout.session.completed, o el evento
+//     checkout.session.async_payment_succeeded para OXXO/transferencia).
+//     Solo en este caso se debe activar la orden / el premium del usuario.
+//   - EsPagoFallido: el pago asíncrono expiró o falló
+//     (checkout.session.async_payment_failed) — hay que cancelar la orden
+//     y liberar el stock/lote si aplicaba.
 type CheckoutSessionEvent struct {
-	EventID              string
-	EventType            string
-	CheckoutSessionID    string
-	PaymentIntentID      string
-	CompradorEmail       string
-	MontoTotal           float64 // ya convertido de centavos a unidad
-	EsCheckoutCompletado bool
+	EventID           string
+	EventType         string
+	CheckoutSessionID string
+	PaymentIntentID   string
+	CompradorEmail    string
+	MontoTotal        float64 // ya convertido de centavos a unidad
+	EsPagoConfirmado  bool
+	EsPagoFallido     bool
 }
 
 // PaymentGateway es el puerto hacia la pasarela de pagos. La

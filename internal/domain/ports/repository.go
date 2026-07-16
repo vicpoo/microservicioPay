@@ -45,6 +45,14 @@ type OrderRepository interface {
 	// publicar el evento de dominio osil.vendido) o 0 si no hay lote.
 	MarcarOrdenPagada(ctx context.Context, checkoutSessionID, paymentIntentID string) (idOrden int, idLote int, err error)
 
+	// CancelarOrdenPorCheckoutSession cancela una orden cuyo pago
+	// asíncrono (OXXO o transferencia bancaria) expiró o falló
+	// (checkout.session.async_payment_failed). Solo actúa si la orden
+	// seguía 'pendiente' — si ya se marcó pagada o cancelada por otro
+	// evento, no hace nada. Libera el stock del producto (y el lote, si
+	// aplica) igual que ActualizarEstadoOrden al cancelar una cama_cafe.
+	CancelarOrdenPorCheckoutSession(ctx context.Context, checkoutSessionID string) error
+
 	// --- Idempotencia de webhooks ---
 	EventoYaProcesado(ctx context.Context, stripeEventID string) (bool, error)
 	RegistrarEventoWebhook(ctx context.Context, stripeEventID, tipoEvento string, payload []byte) error

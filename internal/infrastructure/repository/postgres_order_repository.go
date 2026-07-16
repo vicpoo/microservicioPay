@@ -325,6 +325,66 @@ func (r *PostgresOrderRepository) MarcarOrdenPagada(ctx context.Context, checkou
 	return idOrden, idLote, tx.Commit(ctx)
 }
 
+// CancelarOrdenPorCheckoutSession se llama cuando Stripe reporta que un
+// pago asíncrono (OXXO o transferencia bancaria) falló o el voucher
+// expiró (checkout.session.async_payment_failed). Cancela la orden y,
+// si era una cama_cafe, libera el stock y el lote asociado — mismo
+// comportamiento que ActualizarEstadoOrden al cancelar. Si la orden ya
+// no está 'pendiente' (por ejemplo, ya se pagó por otro medio, o ya se
+// había cancelado), no hace nada.
+func (r *PostgresOrderRepository) CancelarOrdenPorCheckoutSession(ctx context.Context, checkoutSessionID string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var idOrden, idProducto int
+	var tipoOrden, estadoActual string
+	err = tx.QueryRow(ctx, `
+		SELECT id_orden, id_producto, tipo_orden::text, estado_orden::text
+		FROM ordenes
+		WHERE stripe_checkout_session_id = $1
+		FOR UPDATE
+	`, checkoutSessionID).Scan(&idOrden, &idProducto, &tipoOrden, &estadoActual)
+	if err != nil {
+		return entities.ErrOrdenNoEncontrada
+	}
+
+	if estadoActual != string(entities.EstadoPendiente) {
+		// Ya se pagó (por ejemplo el cliente reintentó con tarjeta) o ya
+		// se había cancelado: no tocar nada.
+		return tx.Commit(ctx)
+	}
+
+	if _, err = tx.Exec(ctx, `
+		UPDATE ordenes SET estado_orden = 'cancelada' WHERE id_orden = $1
+	`, idOrden); err != nil {
+		return err
+	}
+
+	if tipoOrden == string(entities.TipoCamaCafe) {
+		var idLote *int
+		if err = tx.QueryRow(ctx, `
+			UPDATE catalogo_productos
+			SET stock = stock + 1, activo = TRUE, updated_at = NOW()
+			WHERE id_producto = $1
+			RETURNING id_lote
+		`, idProducto).Scan(&idLote); err != nil {
+			return fmt.Errorf("error liberando stock del producto: %w", err)
+		}
+		if idLote != nil {
+			if _, err = tx.Exec(ctx, `
+				UPDATE lotes_cafe SET disponible_para_venta = TRUE WHERE id_lote = $1
+			`, *idLote); err != nil {
+				return fmt.Errorf("error liberando disponibilidad del lote: %w", err)
+			}
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
 func (r *PostgresOrderRepository) EventoYaProcesado(ctx context.Context, stripeEventID string) (bool, error) {
 	var procesado bool
 	err := r.pool.QueryRow(ctx, `

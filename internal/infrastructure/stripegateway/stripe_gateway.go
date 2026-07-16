@@ -43,9 +43,28 @@ func (g *StripeGateway) CrearCliente(nombre, email string) (string, error) {
 }
 
 func (g *StripeGateway) CrearSesionPago(customerID string, idOrden int, nombreLote string, precioTotal float64, moneda string) (string, string, error) {
+	// oxxo (pago en efectivo en tienda) y customer_balance (transferencia
+	// SPEI vía CLABE virtual) solo existen en MXN — el llamador siempre
+	// manda "mxn" (ver crear_orden.go), así que no hace falta condicionar
+	// la lista de métodos por moneda. Si algún día se soporta otra
+	// moneda/país, esto tendría que volverse dinámico.
 	params := &stripe.CheckoutSessionParams{
 		Customer: stripe.String(customerID),
 		Mode:     stripe.String(string(stripe.CheckoutSessionModePayment)),
+		PaymentMethodTypes: stripe.StringSlice([]string{
+			"card",
+			"oxxo",
+			"customer_balance",
+		}),
+		PaymentMethodOptions: &stripe.CheckoutSessionPaymentMethodOptionsParams{
+			CustomerBalance: &stripe.CheckoutSessionPaymentMethodOptionsCustomerBalanceParams{
+				FundingType: stripe.String("bank_transfer"),
+				BankTransfer: &stripe.CheckoutSessionPaymentMethodOptionsCustomerBalanceBankTransferParams{
+					Type:                   stripe.String("mx_bank_transfer"),
+					RequestedAddressTypes: stripe.StringSlice([]string{"mx"}),
+				},
+			},
+		},
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
 			{
 				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
@@ -83,13 +102,13 @@ func (g *StripeGateway) VerificarYParsearWebhook(payload []byte, firma string) (
 		EventType: string(event.Type),
 	}
 
-	if event.Type == "checkout.session.completed" {
+	switch event.Type {
+	case "checkout.session.completed", "checkout.session.async_payment_succeeded":
 		var s stripe.CheckoutSession
 		if err := json.Unmarshal(event.Data.Raw, &s); err != nil {
 			return ports.CheckoutSessionEvent{}, err
 		}
 
-		out.EsCheckoutCompletado = true
 		out.CheckoutSessionID = s.ID
 		out.MontoTotal = float64(s.AmountTotal) / 100
 		if s.PaymentIntent != nil {
@@ -98,6 +117,25 @@ func (g *StripeGateway) VerificarYParsearWebhook(payload []byte, firma string) (
 		if s.CustomerDetails != nil {
 			out.CompradorEmail = s.CustomerDetails.Email
 		}
+
+		// checkout.session.completed dispara de inmediato incluso para
+		// OXXO/transferencia, apenas se genera el voucher/CLABE — el
+		// dinero todavía no llegó. Para tarjeta (y cualquier método
+		// síncrono) payment_status ya viene "paid" en este mismo evento.
+		// Para métodos asíncronos, la confirmación real llega después
+		// en checkout.session.async_payment_succeeded.
+		esPagoSincronoConfirmado := string(s.PaymentStatus) == "paid"
+		esAsincronoConfirmado := event.Type == "checkout.session.async_payment_succeeded"
+		out.EsPagoConfirmado = esPagoSincronoConfirmado || esAsincronoConfirmado
+
+	case "checkout.session.async_payment_failed":
+		var s stripe.CheckoutSession
+		if err := json.Unmarshal(event.Data.Raw, &s); err != nil {
+			return ports.CheckoutSessionEvent{}, err
+		}
+
+		out.CheckoutSessionID = s.ID
+		out.EsPagoFallido = true
 	}
 
 	return out, nil
