@@ -3,6 +3,7 @@ package stripegateway
 
 import (
 	"encoding/json"
+	"log"
 	"strconv"
 
 	"github.com/stripe/stripe-go/v78"
@@ -98,6 +99,13 @@ func (g *StripeGateway) CrearSesionPago(customerID string, idOrden int, nombreLo
 func (g *StripeGateway) VerificarYParsearWebhook(payload []byte, firma string) (ports.CheckoutSessionEvent, error) {
 	event, err := webhook.ConstructEvent(payload, firma, g.webhookSecret)
 	if err != nil {
+		// El caso de uso convierte esto en un error genérico para la
+		// respuesta HTTP (no queremos filtrar detalles al exterior),
+		// pero en logs SÍ queremos el motivo real: casi siempre es que
+		// STRIPE_WEBHOOK_SECRET en este proceso no coincide con el
+		// "signing secret" del endpoint configurado en el Dashboard de
+		// Stripe (o con el de `stripe listen`, si se prueba con el CLI).
+		log.Printf("[stripe webhook] verificación de firma falló: %v", err)
 		return ports.CheckoutSessionEvent{}, err
 	}
 
